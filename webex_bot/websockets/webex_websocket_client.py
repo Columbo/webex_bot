@@ -39,13 +39,20 @@ class WebexWebsocketClient(object):
         self.websocket = None
         self.on_open = None
 
-    def _process_incoming_websocket_message(self, msg):
+    def _process_incoming_websocket_message(self, ws, msg):
         """
         Handle websocket data.
         :param msg: The raw websocket message
         """
-        if msg['data']['eventType'] == 'conversation.activity':
-            activity = msg['data']['activity']
+        #print("Print message: -----------------")
+        #print(str(msg))
+        #print("End message: -----------------")
+        data = json.loads(msg)
+        #print("JsonLoad......")
+        #print(str(data))
+        #print("JsonEnd......")
+        if data['data']['eventType'] == 'conversation.activity':
+            activity = data['data']['activity']
             if activity['verb'] == 'post':
                 logging.debug(f"activity={activity}")
 
@@ -54,7 +61,7 @@ class WebexWebsocketClient(object):
                 logging.debug(f"webex_message from message_base_64_id: {webex_message}")
                 if self.on_message:
                     # ack message first
-                    self._ack_message(message_base_64_id)
+                    self._ack_message(message_base_64_id, ws)
                     # Now process it with the handler
                     self.on_message(webex_message, activity)
             elif activity['verb'] == 'cardAction':
@@ -65,7 +72,7 @@ class WebexWebsocketClient(object):
                 logging.info(f"attachment_actions from message_base_64_id: {attachment_actions}")
                 if self.on_card_action:
                     # ack message first
-                    self._ack_message(message_base_64_id)
+                    self._ack_message(message_base_64_id, ws)
                     # Now process it with the handler
                     self.on_card_action(attachment_actions, activity)
             else:
@@ -91,7 +98,7 @@ class WebexWebsocketClient(object):
         logging.debug(f"conversation_message={conversation_message}")
         return conversation_message['id']
 
-    def _ack_message(self, message_id):
+    def _ack_message(self, message_id, ws):
         """
         Ack that this message has been processed. This will prevent the
         message coming again.
@@ -100,7 +107,7 @@ class WebexWebsocketClient(object):
         logging.debug(f"WebSocket ack message with id={message_id}")
         ack_message = {'type': 'ack',
                        'messageId': message_id}
-        self.websocket.send(json.dumps(ack_message))
+        ws.send(json.dumps(ack_message))
         logging.info(f"WebSocket ack message with id={message_id}. Complete.")
 
     def _get_device_info(self, check_existing=True):
