@@ -137,7 +137,11 @@ class WebexWebsocketClient(object):
         print("### closed ###")
 
     def _on_open(self, ws):
-        print("### open ###")
+        print("### Login ###")
+        msg = {'id': str(uuid.uuid4()),
+                       'type': 'authorization',
+                       'data': {'token': 'Bearer ' + self.access_token}}
+        ws.send(json.dumps(msg))
 
     def run(self):
         websocket.enableTrace(True)
@@ -149,6 +153,6 @@ class WebexWebsocketClient(object):
         logging.info(f"Opening websocket connection to {ws_url}")
         ws = websocket.WebSocketApp(ws_url,
                               on_open=self._on_open,                              
-                              on_message=self._process_incoming_websocket_message)
+                              on_message=self._process_incoming_websocket_message)                              
 
         ws.run_forever()
