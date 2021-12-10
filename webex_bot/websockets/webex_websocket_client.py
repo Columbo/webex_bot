@@ -6,7 +6,9 @@ import uuid
 
 import backoff
 import requests
-import websockets
+import _thread
+from websocket import create_connection
+import websocket
 from webexteamssdk import WebexTeamsAPI
 
 DEFAULT_DEVICE_URL = "https://wdm-a.wbx2.com/wdm/api/v1"
@@ -35,6 +37,7 @@ class WebexWebsocketClient(object):
         self.on_message = on_message
         self.on_card_action = on_card_action
         self.websocket = None
+        self.on_open = None
 
     def _process_incoming_websocket_message(self, msg):
         """
@@ -127,45 +130,25 @@ class WebexWebsocketClient(object):
         logging.debug(f"self.device_info: {self.device_info}")
         return resp
 
+    def _on_error(self, ws, error):
+        print(error)
+
+    def _on_close(self, ws, close_status_code, close_msg):
+        print("### closed ###")
+
+    def _on_open(self, ws):
+        print("### open ###")
+
     def run(self):
+        websocket.enableTrace(True)
         if self.device_info is None:
             if self._get_device_info() is None:
                 logging.error('could not get/create device info')
                 raise Exception("No WDM device info")
+        ws_url = self.device_info['webSocketUrl']
+        logging.info(f"Opening websocket connection to {ws_url}")
+        ws = websocket.WebSocketApp(ws_url,
+                              on_open=self._on_open,                              
+                              on_message=self._process_incoming_websocket_message)
 
-        async def _websocket_recv():
-            message = await self.websocket.recv()
-            logging.debug("WebSocket Received Message(raw): %s\n" % message)
-            try:
-                msg = json.loads(message)
-                loop = asyncio.get_event_loop()
-                loop.run_in_executor(None, self._process_incoming_websocket_message, msg)
-            except Exception as messageProcessingException:
-                logging.warning(
-                    f"An exception occurred while processing message. Ignoring. {messageProcessingException}")
-
-        @backoff.on_exception(backoff.expo, websockets.exceptions.ConnectionClosedError)
-        @backoff.on_exception(backoff.expo, socket.gaierror)
-        async def _connect_and_listen():
-            ws_url = self.device_info['webSocketUrl']
-            logging.info(f"Opening websocket connection to {ws_url}")
-            async with websockets.connect(ws_url) as _websocket:
-                self.websocket = _websocket
-                logging.info("WebSocket Opened.")
-                msg = {'id': str(uuid.uuid4()),
-                       'type': 'authorization',
-                       'data': {'token': 'Bearer ' + self.access_token}}
-                await self.websocket.send(json.dumps(msg))
-
-                while True:
-                    await _websocket_recv()
-
-        try:
-            asyncio.get_event_loop().run_until_complete(_connect_and_listen())
-        except Exception as runException:
-            logging.error(f"runException: {runException}")
-            if self._get_device_info(check_existing=False) is None:
-                logging.error('could not create device info')
-                raise Exception("No WDM device info")
-            # trigger re-connect
-            asyncio.get_event_loop().run_until_complete(_connect_and_listen())
+        ws.run_forever()
