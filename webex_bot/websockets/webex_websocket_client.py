@@ -1,12 +1,8 @@
-import asyncio
 import json
 import logging
-import socket
 import uuid
 
-import backoff
 import requests
-import _thread
 from websocket import create_connection
 import websocket
 from webexteamssdk import WebexTeamsAPI
@@ -44,13 +40,9 @@ class WebexWebsocketClient(object):
         Handle websocket data.
         :param msg: The raw websocket message
         """
-        #print("Print message: -----------------")
-        #print(str(msg))
-        #print("End message: -----------------")
+
         data = json.loads(msg)
-        #print("JsonLoad......")
-        #print(str(data))
-        #print("JsonEnd......")
+
         if data['data']['eventType'] == 'conversation.activity':
             activity = data['data']['activity']
             if activity['verb'] == 'post':
@@ -138,6 +130,7 @@ class WebexWebsocketClient(object):
         return resp
 
     def _on_error(self, ws, error):
+        print("### Error ###")
         print(error)
 
     def _on_close(self, ws, close_status_code, close_msg):
@@ -146,8 +139,8 @@ class WebexWebsocketClient(object):
     def _on_open(self, ws):
         print("### Login ###")
         msg = {'id': str(uuid.uuid4()),
-                       'type': 'authorization',
-                       'data': {'token': 'Bearer ' + self.access_token}}
+               'type': 'authorization',
+               'data': {'token': 'Bearer ' + self.access_token}}
         ws.send(json.dumps(msg))
 
     def run(self):
@@ -159,7 +152,9 @@ class WebexWebsocketClient(object):
         ws_url = self.device_info['webSocketUrl']
         logging.info(f"Opening websocket connection to {ws_url}")
         ws = websocket.WebSocketApp(ws_url,
-                              on_open=self._on_open,                              
-                              on_message=self._process_incoming_websocket_message)                              
-
+                                    on_open=self._on_open,
+                                    on_error=self._on_error,
+                                    on_close=self._on_close,
+                                    on_message=self._process_incoming_websocket_message)
+        logging.info(f"WebsocketApp initialized succesfully {ws_url}")
         ws.run_forever()
